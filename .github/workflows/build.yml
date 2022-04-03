@@ -1,0 +1,52 @@
+name: Build on Push
+on: [push]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+            - name: Use Node.js 17.X
+              uses: actions/setup-node@v2
+              with:
+                  node-version: 17.x
+            - name: Set outputs
+              id: vars
+              run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+            - name: Install dependencies, build, and archive.
+              run: |
+                  yarn install
+                  yarn build
+                  sudo apt-get update
+                  sudo apt-get -y install zip unzip
+                  zip -r dist-${GITHUB_SHORT_SHA}.zip dist
+              env:
+                  GITHUB_SHORT_SHA: ${{ steps.vars.outputs.sha_short }}
+            - name: Create tag
+              uses: rickstaa/action-create-tag@v1
+              with:
+                  tag: ${{ steps.vars.outputs.sha_short }}
+            - name: Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  tag_name: ${{ steps.vars.outputs.sha_short }}
+                  name: ${{ steps.vars.outputs.sha_short }}
+                  prerelease: true
+                  files: dist-${{ steps.vars.outputs.sha_short }}.zip
+                  body: "This is an automated release."
+    publish-npm:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+            - name: Use Node.js 16.X
+              uses: actions/setup-node@v2
+              with:
+                  node-version: 16.x
+                  registry-url: "https://registry.npmjs.org/"
+            - name: Publish
+              run: |
+                  npm install
+                  npm run build:pkg
+                  npm publish
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
